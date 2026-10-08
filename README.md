@@ -8,9 +8,9 @@
 
 ## 在线体验
 
-[打开 GitHub Pages 公开展示版](https://zhaoyihui78.github.io/Civil-Service-Exam-Preparation-Hub/)
+[打开 GitHub Pages 加密分享版](https://zhaoyihui78.github.io/Civil-Service-Exam-Preparation-Hub/)
 
-在线版用于浏览公开示例岗位、课程和考公知识库，是只读展示模式。个人计划、手动导入岗位、阅读笔记、本地 PDF 与私人 Vault 只在本机工作台中保存和使用。
+在线版需要输入页面所有者提供的共享密钥。部署数据使用 PBKDF2 与 AES-GCM 加密，是只读分享模式；共享密钥只保存在 GitHub Actions Secret 中，不写入仓库或前端代码。个人计划、阅读笔记与本地 PDF 仍只在本机工作台中保存和使用。
 
 ## 当前功能
 

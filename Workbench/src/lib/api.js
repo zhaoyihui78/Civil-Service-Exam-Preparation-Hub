@@ -11,7 +11,76 @@ import {
 
 const DEFAULT_TIMEOUT = 12_000;
 const HOSTED = import.meta.env.VITE_WORKBENCH_HOSTED === "true";
+export const HOSTED_ACCESS_REQUIRED =
+  HOSTED && import.meta.env.VITE_REQUIRE_ACCESS_KEY === "true";
 let hostedDataPromise = null;
+
+function decodeBase64(value) {
+  const binary = window.atob(value);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+async function decryptHostedData(accessKey) {
+  const response = await fetch(`${import.meta.env.BASE_URL}hosted-data.enc.json`, {
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) throw new Error("加密数据加载失败，请稍后重试。");
+  const envelope = await response.json();
+  if (
+    envelope?.version !== 1 ||
+    envelope?.kdf?.name !== "PBKDF2" ||
+    envelope?.cipher?.name !== "AES-GCM"
+  ) {
+    throw new Error("加密数据格式无法识别。");
+  }
+
+  try {
+    const material = await window.crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(accessKey),
+      "PBKDF2",
+      false,
+      ["deriveKey"],
+    );
+    const key = await window.crypto.subtle.deriveKey(
+      {
+        name: "PBKDF2",
+        hash: envelope.kdf.hash,
+        iterations: envelope.kdf.iterations,
+        salt: decodeBase64(envelope.kdf.salt),
+      },
+      material,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["decrypt"],
+    );
+    const plaintext = await window.crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: decodeBase64(envelope.cipher.iv) },
+      key,
+      decodeBase64(envelope.data),
+    );
+    return JSON.parse(new TextDecoder().decode(plaintext));
+  } catch {
+    throw new Error("访问密钥不正确。");
+  }
+}
+
+export function unlockHostedData(accessKey) {
+  if (!HOSTED_ACCESS_REQUIRED) return loadHostedData();
+  const normalized = String(accessKey || "").trim();
+  if (!normalized) return Promise.reject(new Error("请输入访问密钥。"));
+  const attempt = decryptHostedData(normalized);
+  hostedDataPromise = attempt.catch((error) => {
+    hostedDataPromise = null;
+    throw error;
+  });
+  return hostedDataPromise;
+}
+
+export function lockHostedData() {
+  hostedDataPromise = null;
+}
 
 function hostedReadOnlyError() {
   const error = new Error("线上版本为公开只读展示；请在本机工作台中修改私人数据。");
@@ -20,6 +89,9 @@ function hostedReadOnlyError() {
 }
 
 async function loadHostedData() {
+  if (HOSTED_ACCESS_REQUIRED && !hostedDataPromise) {
+    throw new Error("请先输入访问密钥。");
+  }
   if (!hostedDataPromise) {
     hostedDataPromise = fetch(`${import.meta.env.BASE_URL}hosted-data.json`, {
       headers: { Accept: "application/json" },

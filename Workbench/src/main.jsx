@@ -12,6 +12,7 @@ import "@fontsource/space-grotesk/700.css";
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 import { App } from "./App.jsx";
+import { HostedAccessGate } from "./components/HostedAccessGate.jsx";
 import "./styles.css";
 
 const Router = import.meta.env.VITE_WORKBENCH_HOSTED === "true"
@@ -21,7 +22,9 @@ const Router = import.meta.env.VITE_WORKBENCH_HOSTED === "true"
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <Router>
-      <App />
+      <HostedAccessGate>
+        <App />
+      </HostedAccessGate>
     </Router>
   </React.StrictMode>,
 );
