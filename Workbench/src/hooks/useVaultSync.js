@@ -14,16 +14,18 @@ function scopeForPath(pathname) {
 }
 
 export function useVaultSync(pathname) {
+  const hosted = import.meta.env.VITE_WORKBENCH_HOSTED === "true";
   const scope = useMemo(() => scopeForPath(pathname), [pathname]);
   const [state, setState] = useState({
     revision: 0,
-    status: "connecting",
+    status: hosted ? "hosted" : "connecting",
     indexVersion: 0,
     lastIndexedAt: null,
     error: null,
   });
 
   useEffect(() => {
+    if (hosted) return undefined;
     const events = new EventSource("/api/vault/events");
 
     events.onmessage = (message) => {
@@ -60,7 +62,7 @@ export function useVaultSync(pathname) {
     };
 
     return () => events.close();
-  }, [scope]);
+  }, [hosted, scope]);
 
   return state;
 }

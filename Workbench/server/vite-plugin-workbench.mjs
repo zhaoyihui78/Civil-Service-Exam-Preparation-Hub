@@ -518,7 +518,7 @@ function materialGroup(document) {
   return "other";
 }
 
-function collectionPayload(index, kind) {
+export function collectionPayload(index, kind) {
   if (kind === "materials") {
     const items = index.documents
       .filter(
@@ -629,7 +629,7 @@ function collectionPayload(index, kind) {
   return { total: 0, groups: [], items: [] };
 }
 
-function overviewPayload(index) {
+export function overviewPayload(index) {
   const candidateCount = index.topics.items.filter(
     (topic) =>
       topic.folderStatus === "idea" &&
@@ -769,7 +769,7 @@ function overviewPayload(index) {
   };
 }
 
-function graphPayload(index) {
+export function graphPayload(index) {
   const nodes = index.documents.filter(
     (document) =>
       document.layer === "wiki" &&
@@ -827,7 +827,7 @@ function readerBodyFromContent(content) {
     : content;
 }
 
-function documentPayload(index, id) {
+export function documentPayload(index, id) {
   const document = getDocument(index, id);
   if (!document) return null;
   const body = readerBodyFromContent(document.content);

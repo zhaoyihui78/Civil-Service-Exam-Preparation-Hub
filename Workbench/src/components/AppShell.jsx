@@ -120,7 +120,7 @@ export function AppShell({ children, onOpenSearch, sync }) {
         <div className="sidebar__bottom">
           <div className={`sidebar__sync sidebar__sync--${sync?.status || "connecting"}`}>
             <span aria-hidden="true" />
-            <span>{sync?.status === "watching" ? "文件已实时同步" : sync?.status === "rebuilding" || sync?.status === "pending" ? "正在同步文件" : "正在连接文件同步"}</span>
+            <span>{sync?.status === "hosted" ? "公开只读展示" : sync?.status === "watching" ? "文件已实时同步" : sync?.status === "rebuilding" || sync?.status === "pending" ? "正在同步文件" : "正在连接文件同步"}</span>
           </div>
           <NavLink
             className="sidebar__settings"

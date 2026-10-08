@@ -10,8 +10,78 @@ import {
 } from "./api-errors";
 
 const DEFAULT_TIMEOUT = 12_000;
+const HOSTED = import.meta.env.VITE_WORKBENCH_HOSTED === "true";
+let hostedDataPromise = null;
+
+function hostedReadOnlyError() {
+  const error = new Error("线上版本为公开只读展示；请在本机工作台中修改私人数据。");
+  error.code = "HOSTED_READ_ONLY";
+  return error;
+}
+
+async function loadHostedData() {
+  if (!hostedDataPromise) {
+    hostedDataPromise = fetch(`${import.meta.env.BASE_URL}hosted-data.json`, {
+      headers: { Accept: "application/json" },
+    }).then((response) => {
+      if (!response.ok) throw new Error("公开展示数据加载失败。");
+      return response.json();
+    });
+  }
+  return hostedDataPromise;
+}
+
+function hostedSearch(data, url) {
+  const query = String(url.searchParams.get("q") || "").trim().toLocaleLowerCase("zh-CN");
+  const items = data.searchDocuments.filter((item) => {
+    if (!query) return true;
+    const haystack = `${item.title || ""} ${item.section || ""} ${item.excerpt || ""} ${(item.tags || []).join(" ")}`
+      .toLocaleLowerCase("zh-CN");
+    return query.split(/\s+/).every((term) => haystack.includes(term));
+  });
+  return { query, total: items.length, items: items.slice(0, 100) };
+}
+
+async function hostedRequest(path, options = {}) {
+  if ((options.method || "GET").toUpperCase() !== "GET") {
+    throw hostedReadOnlyError();
+  }
+
+  const data = await loadHostedData();
+  const url = new URL(path, window.location.origin);
+  if (url.pathname === "/api/overview") return data.overview;
+  if (url.pathname === "/api/exam/dashboard") return data.examDashboard;
+  if (url.pathname === "/api/exam/opportunities") return data.examOpportunities;
+  if (url.pathname === "/api/materials") return data.materials;
+  if (url.pathname === "/api/materials/folder") {
+    return data.materialFolders[url.searchParams.get("path") || "10_raw"] || {
+      generatedAt: data.generatedAt,
+      folder: null,
+      breadcrumbs: [],
+      folders: [],
+      items: [],
+    };
+  }
+  if (url.pathname === "/api/material-reading-queue") return data.materialReadingQueue;
+  if (url.pathname === "/api/books") return data.books;
+  if (url.pathname === "/api/graph") return data.graph;
+  if (url.pathname === "/api/runtime") return data.runtime;
+  if (url.pathname === "/api/search") return hostedSearch(data, url);
+  if (url.pathname.startsWith("/api/collections/")) {
+    const kind = decodeURIComponent(url.pathname.slice("/api/collections/".length));
+    return data.collections[kind] || { total: 0, groups: [], items: [] };
+  }
+  if (url.pathname.startsWith("/api/documents/")) {
+    const id = decodeURIComponent(url.pathname.slice("/api/documents/".length));
+    const document = data.documents[id];
+    if (document) return document;
+    throw new Error("公开展示中没有这篇文档。");
+  }
+  throw new Error("该功能仅在本机工作台中可用。");
+}
 
 async function request(path, options = {}) {
+  if (HOSTED) return hostedRequest(path, options);
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), options.timeout ?? DEFAULT_TIMEOUT);
 

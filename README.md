@@ -6,6 +6,12 @@
 
 ![考公作战台界面预览](./工作台预览.png)
 
+## 在线体验
+
+[打开 GitHub Pages 公开展示版](https://zhaoyihui78.github.io/Civil-Service-Exam-Preparation-Hub/)
+
+在线版用于浏览公开示例岗位、课程和考公知识库，是只读展示模式。个人计划、手动导入岗位、阅读笔记、本地 PDF 与私人 Vault 只在本机工作台中保存和使用。
+
 ## 当前功能
 
 ### 岗位雷达
