@@ -2,13 +2,41 @@
 type: wiki-index
 status: active
 created: 2026-01-15
-updated: 2026-08-06
+updated: 2026-10-08
 demo: true
 tags:
   - demo-vault
 ---
 
-# Wiki Index
+# 考公与马克思主义知识索引
+
+本索引是公开演示 Vault 中的通用学习框架，不含真实用户成绩、档案或个人经历。实际报考条件必须回到当年度官方公告和职位表核验。
+
+## 考公核心
+
+- [[concepts/公务员考试报考体系]]
+- [[concepts/行测能力结构]]
+- [[concepts/申论作答链条]]
+- [[frameworks/2027考公岗位筛选清单]]
+- [[frameworks/国考省考公告核验清单]]
+- [[frameworks/行测错题复盘法]]
+- [[frameworks/申论材料拆解与答案生成]]
+- [[frameworks/面试综合分析题答题框架]]
+- [[frameworks/时政热点五维分析法]]
+
+## 马克思主义专业知识
+
+- [[concepts/马克思主义哲学方法论]]
+- [[concepts/政治经济学核心线索]]
+- [[concepts/科学社会主义基本问题]]
+- [[concepts/马克思主义中国化时代化]]
+- [[concepts/党史党建知识框架]]
+- [[concepts/思想政治教育原理]]
+- [[concepts/新时代治国理政主题框架]]
+- [[frameworks/马克思主义理论转化为申论表达]]
+- [[frameworks/政策文件阅读卡]]
+
+## 原通用知识维护页面
 
 ## Concepts
 

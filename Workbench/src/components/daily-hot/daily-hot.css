@@ -135,6 +135,21 @@
   font-size: 11px;
 }
 
+.daily-hot-refresh-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.daily-hot-refresh-note {
+  min-width: 0;
+  color: var(--ink-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
 .daily-hot-refresh:hover:not(:disabled) {
   border-color: var(--accent-soft);
   color: var(--accent);
@@ -610,6 +625,11 @@
   .daily-hot-toolbar,
   .daily-hot-daily {
     align-items: flex-start;
+  }
+
+  .daily-hot-refresh-control {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .daily-hot-daily {

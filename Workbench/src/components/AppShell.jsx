@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
-  IconBrandTiktok,
   IconBooks,
-  IconBulb,
-  IconClipboardList,
   IconCommand,
   IconHome,
   IconLibrary,
@@ -12,27 +9,30 @@ import {
   IconRadar2,
   IconSearch,
   IconSettings,
-  IconSocial,
   IconStack2,
+  IconTargetArrow,
   IconTopologyStar3,
-  IconX,
 } from "@tabler/icons-react";
 
-const localWorkbench = import.meta.env.VITE_WORKBENCH_HOSTED !== "true";
-
-const primaryNavigation = [
-  { to: "/", label: "总览", icon: IconHome, end: true },
-  { to: "/graph", label: "知识星图", icon: IconTopologyStar3 },
-  { to: "/wiki", label: "Wiki 层", icon: IconLibrary },
-  { to: "/materials", label: "素材层", icon: IconStack2 },
-  { to: "/books", label: "书架", icon: IconBooks },
-  { to: "/daily-hot", label: "每日热点", icon: IconRadar2 },
-  ...(localWorkbench
-    ? [{ to: "/social-insights", label: "社媒洞察", icon: IconSocial }]
-    : []),
-  { to: "/topics", label: "灵感库", icon: IconBulb },
-  { to: "/content", label: "内容中心", icon: IconClipboardList },
-  { to: "/douyin", label: "抖音数据", icon: IconBrandTiktok },
+const navigationSections = [
+  {
+    label: "总览",
+    items: [{ to: "/", label: "今日总览", icon: IconHome, end: true }],
+  },
+  {
+    label: "报考中心",
+    items: [{ to: "/opportunities", label: "岗位雷达", icon: IconTargetArrow }],
+  },
+  {
+    label: "备考中心",
+    items: [
+      { to: "/materials", label: "备考资料", icon: IconStack2 },
+      { to: "/books", label: "课程与书架", icon: IconBooks },
+      { to: "/wiki", label: "知识库", icon: IconLibrary },
+      { to: "/graph", label: "知识地图", icon: IconTopologyStar3 },
+      { to: "/daily-hot", label: "时政热点", icon: IconRadar2 },
+    ],
+  },
 ];
 
 export function AppShell({ children, onOpenSearch, sync }) {
@@ -60,7 +60,7 @@ export function AppShell({ children, onOpenSearch, sync }) {
         </button>
         <span className="mobile-header__brand">
           <img alt="" aria-hidden="true" src="/workbench-mark.svg" />
-          <span>个人 AI</span>
+          <span>考公作战台</span>
         </span>
         <button
           aria-label="搜索"
@@ -86,37 +86,34 @@ export function AppShell({ children, onOpenSearch, sync }) {
           <div className="sidebar__brand-row">
             <NavLink className="sidebar__brand" onClick={() => setMobileOpen(false)} to="/">
               <img alt="" aria-hidden="true" src="/workbench-mark.svg" />
-              <span>个人 AI</span>
+              <span>考公作战台</span>
             </NavLink>
-            <button
-              aria-label="关闭导航"
-              className="icon-button sidebar__close"
-              onClick={() => setMobileOpen(false)}
-              type="button"
-            >
-              <IconX aria-hidden="true" />
-            </button>
           </div>
-          <div className="sidebar__tag">PERSONAL AI WORKBENCH</div>
+          <div className="sidebar__tag">CIVIL SERVICE STUDY DESK</div>
 
           <nav aria-label="主要导航" className="sidebar__nav">
-            {primaryNavigation.map((item) => {
-              const Icon = item.icon;
-              return (
-                <NavLink
-                  className={({ isActive }) =>
-                    `sidebar__nav-item${isActive ? " sidebar__nav-item--active" : ""}`
-                  }
-                  end={item.end}
-                  key={item.to}
-                  onClick={() => setMobileOpen(false)}
-                  to={item.to}
-                >
-                  <Icon aria-hidden="true" className="sidebar__nav-icon" stroke={1.7} />
-                  <span>{item.label}</span>
-                </NavLink>
-              );
-            })}
+            {navigationSections.map((section) => (
+              <section className="sidebar__nav-section" key={section.label}>
+                <span className="sidebar__nav-label">{section.label}</span>
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <NavLink
+                      className={({ isActive }) =>
+                        `sidebar__nav-item${isActive ? " sidebar__nav-item--active" : ""}`
+                      }
+                      end={item.end}
+                      key={item.to}
+                      onClick={() => setMobileOpen(false)}
+                      to={item.to}
+                    >
+                      <Icon aria-hidden="true" className="sidebar__nav-icon" stroke={1.7} />
+                      <span>{item.label}</span>
+                    </NavLink>
+                  );
+                })}
+              </section>
+            ))}
           </nav>
         </div>
 
@@ -145,7 +142,7 @@ export function AppShell({ children, onOpenSearch, sync }) {
         type="button"
       >
         <IconSearch aria-hidden="true" />
-        <span>搜索知识库</span>
+        <span>搜索备考资料</span>
         <span className="floating-search__shortcut">
           <IconCommand aria-hidden="true" />K
         </span>

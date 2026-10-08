@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { booksPayload } from "../server/books.mjs";
+import { bookPdfDocument, booksPayload } from "../server/books.mjs";
 
 function document(path, overrides = {}) {
   const fileName = path.split("/").at(-1);
@@ -127,4 +127,26 @@ test("groups Chinese-numbered chapters and talks as main chapters", () => {
   );
   assert.equal(groupsByTitle["第二章 增强判断力"], "chapters");
   assert.equal(groupsByTitle["第十一讲 人类误判心理学"], "chapters");
+});
+
+test("only exposes indexed PDFs from the books root to the web reader", () => {
+  const index = fixtureIndex();
+  const pdf = index.documents.find((item) => item.extension === "pdf");
+  assert.equal(bookPdfDocument(index, pdf.id)?.path, pdf.path);
+
+  index.documents.push(
+    document("10_raw/articles/private.pdf", {
+      id: "outside-pdf",
+      extension: "pdf",
+      previewKind: "unsupported",
+    }),
+    document("10_raw/books/.hidden/private.pdf", {
+      id: "hidden-pdf",
+      extension: "pdf",
+      previewKind: "unsupported",
+    }),
+  );
+  assert.equal(bookPdfDocument(index, "outside-pdf"), null);
+  assert.equal(bookPdfDocument(index, "hidden-pdf"), null);
+  assert.equal(bookPdfDocument(index, "missing"), null);
 });

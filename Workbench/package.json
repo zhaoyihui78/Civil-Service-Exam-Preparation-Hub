@@ -40,6 +40,7 @@
     "mdast-util-to-string": "^4.0.0",
     "minisearch": "^7.2.0",
     "motion": "^12.23.24",
+    "pdfjs-dist": "^5.4.624",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-markdown": "^10.1.0",

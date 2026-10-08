@@ -155,12 +155,12 @@ export function MaterialsPage({ onOpenDocument }) {
   }, [query, queuedOnly, sourceItems]);
 
   const title = isHome
-    ? "素材层"
+    ? "备考资料"
     : isQueue
       ? "我的待看"
       : data?.folder?.displayName || folderPath.split("/").pop();
   const description = isHome
-    ? "原始证据按真实文件夹归位；待看只是阅读安排，不改变素材，也不代表已经入库。"
+    ? "按行测、申论、面试、时政政策和马克思主义理论整理的考公资料库。"
     : isQueue
       ? "你亲自留下的阅读队列。打开不会自动移除，读完后再明确处理。"
       : `${data?.folder?.directFileCount ?? 0} 份直属素材 · ${data?.folder?.descendantFileCount ?? 0} 份含子目录`;
@@ -168,7 +168,7 @@ export function MaterialsPage({ onOpenDocument }) {
   return (
     <div className="page page--materials">
       <PageHeader
-        eyebrow="RAW SOURCES"
+        eyebrow="CIVIL SERVICE MATERIALS"
         title={title}
         description={description}
         aside={
@@ -181,7 +181,7 @@ export function MaterialsPage({ onOpenDocument }) {
 
       {!isHome ? (
         <nav aria-label="素材路径" className="materials-breadcrumbs">
-          <button onClick={() => openFolder(ROOT_PATH)} type="button">素材</button>
+              <button onClick={() => openFolder(ROOT_PATH)} type="button">备考资料</button>
           {isQueue ? (
             <>
               <IconChevronRight aria-hidden="true" size={14} />
@@ -215,12 +215,12 @@ export function MaterialsPage({ onOpenDocument }) {
 
       {result.error && data ? (
         <div className="materials-notice" role="status">
-          本地 Workbench 暂未连接，当前不展示模拟素材数据。
+          本地 Workbench 暂未连接，当前无法读取备考资料。
         </div>
       ) : null}
 
       {isLoading ? (
-        <div className="materials-loading" aria-label="素材加载中">
+        <div className="materials-loading" aria-label="备考资料加载中">
           <div className="skeleton" />
           <div className="skeleton" />
           <div className="skeleton" />
@@ -263,8 +263,8 @@ export function MaterialsPage({ onOpenDocument }) {
           <section className="materials-section">
             <div className="materials-section__head">
               <div>
-                <span className="eyebrow">REAL FOLDERS</span>
-                <h2>按文件夹浏览</h2>
+                <span className="eyebrow">EXAM SUBJECTS</span>
+                <h2>按考试模块浏览</h2>
               </div>
               <span className="materials-section__meta mono">10_raw/ · {folders.length} folders</span>
             </div>
@@ -278,8 +278,8 @@ export function MaterialsPage({ onOpenDocument }) {
           <section className="materials-section">
             <div className="materials-section__head">
               <div>
-                <span className="eyebrow">RECENTLY CHANGED</span>
-                <h2>最近变化</h2>
+                <span className="eyebrow">RECENT MATERIALS</span>
+                <h2>最近更新</h2>
               </div>
               <span className="materials-section__meta">最近新增不等于待看</span>
             </div>

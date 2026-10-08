@@ -39,7 +39,7 @@ function ItemMeta({ item }) {
 }
 
 function HotCard({ item, index, featured = false }) {
-  const primaryLink = item.links?.story || item.links?.aihot;
+  const primaryLink = item.links?.original;
   const domain = item.attention?.domains?.[0]?.label;
 
   return (
@@ -51,38 +51,29 @@ function HotCard({ item, index, featured = false }) {
       </div>
       <div className="daily-hot-card__body">
         <div className="daily-hot-card__eyebrow">
-          <span>{item.kind === "hot-topic" ? "MULTI-SOURCE EVENT" : "AI HOT SELECTED"}</span>
+          <span>{item.kind === "policy" ? "OFFICIAL POLICY" : "CURRENT AFFAIRS"}</span>
           {domain ? <span className="daily-hot-card__domain">{domain}</span> : null}
         </div>
         <h3>{item.title}</h3>
         <p className="daily-hot-card__reason">{item.attention?.reason}</p>
         {item.summary ? (
           <div className="daily-hot-card__summary">
-            <span>AI HOT 综述</span>
+            <span>官方摘要</span>
             <p>{item.summary}</p>
           </div>
         ) : null}
-        {item.latest ? (
-          <p className="daily-hot-card__latest">
-            <strong>最新进展</strong>
-            {item.latest}
-          </p>
-        ) : null}
+        <p className="daily-hot-card__latest">
+          <strong>备考切入</strong>
+          {item.examAngle}
+        </p>
         <ItemMeta item={item} />
         <div className="daily-hot-card__actions">
           <ExternalNewsLink
             className="daily-hot-link daily-hot-link--primary"
             href={primaryLink}
-            label={`在 AI HOT 查看：${item.title}`}
+            label={`查看官方原文：${item.title}`}
           >
-            查看事件 <IconArrowUpRight aria-hidden="true" />
-          </ExternalNewsLink>
-          <ExternalNewsLink
-            className="daily-hot-link"
-            href={item.links?.original}
-            label={`查看原始来源：${item.title}`}
-          >
-            原始来源 <IconExternalLink aria-hidden="true" />
+            官方原文 <IconExternalLink aria-hidden="true" />
           </ExternalNewsLink>
         </div>
       </div>
@@ -91,12 +82,12 @@ function HotCard({ item, index, featured = false }) {
 }
 
 function CompactHotRow({ item }) {
-  const primaryLink = item.links?.story || item.links?.aihot;
+  const primaryLink = item.links?.original;
   return (
     <article className="daily-hot-row">
       <div>
         <span className="daily-hot-row__kind">
-          {item.kind === "hot-topic" ? item.evidence?.label : "24 小时精选"}
+          {item.categoryLabel} · {item.themeLabel}
         </span>
         <h3>{item.title}</h3>
         <p>{item.attention?.reason}</p>
@@ -117,7 +108,7 @@ function CompactHotRow({ item }) {
 
 function LoadingState() {
   return (
-    <div className="daily-hot-loading" aria-label="正在读取 AI HOT">
+    <div className="daily-hot-loading" aria-label="正在读取官方时政数据">
       <div className="skeleton" />
       <div className="skeleton" />
       <div className="skeleton" />
@@ -125,14 +116,38 @@ function LoadingState() {
   );
 }
 
+function formatRefreshTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
 export function DailyHotPage() {
   const [result, setResult] = useState({ data: null, source: "loading", error: null });
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshOutcome, setRefreshOutcome] = useState("");
 
   const refresh = useCallback(async (force = false) => {
     setRefreshing(true);
+    if (force) setRefreshOutcome("正在绕过缓存，请求中国政府网官方数据…");
     try {
-      setResult(await loadDailyHot({ refresh: force }));
+      const next = await loadDailyHot({ refresh: force });
+      setResult(next);
+      if (force) {
+        if (next.source === "live" && next.data?.status === "live") {
+          setRefreshOutcome(`刷新成功 · ${formatRefreshTime(next.data.fetchedAt)}`);
+        } else if (next.data?.status === "stale") {
+          setRefreshOutcome("刷新失败，已继续显示上一版有效数据");
+        } else {
+          setRefreshOutcome("刷新失败，请检查网络后重试");
+        }
+      }
     } finally {
       setRefreshing(false);
     }
@@ -155,32 +170,36 @@ export function DailyHotPage() {
     <div className="daily-hot-source">
       <div>
         <span className={`status-dot${stale ? " status-dot--warn" : " status-dot--ok"}`} />
-        <strong>{stale ? "上一版有效数据" : live ? "AI HOT 已连接" : "连接中"}</strong>
+        <strong>{stale ? "上一版有效数据" : live ? "官方数据已连接" : "连接中"}</strong>
       </div>
-      <span>{data?.fetchedAt ? formatFullDate(data.fetchedAt) : "等待首次刷新"}</span>
+      <span>
+        {data?.fetchedAt
+          ? `${formatFullDate(data.fetchedAt)}:${new Date(data.fetchedAt).getSeconds().toString().padStart(2, "0")}`
+          : "等待首次刷新"}
+      </span>
     </div>
   );
 
   return (
     <div className="page page--daily-hot">
       <PageHeader
-        eyebrow="EXTERNAL SIGNALS · AI HOT"
-        title="每日热点"
+        eyebrow="CIVIL SERVICE · OFFICIAL CURRENT AFFAIRS"
+        title="考公时政热点"
         aside={sourceAside}
       />
 
       <section className="daily-hot-summary" aria-label="热点概览">
         <div>
-          <strong>{loading ? "…" : data?.counts?.upstreamHot ?? "—"}</strong>
-          <span>多源热点</span>
+          <strong>{loading ? "…" : data?.counts?.upstream ?? "—"}</strong>
+          <span>官方候选</span>
         </div>
         <div>
           <strong>{loading ? "…" : mustRead.length}</strong>
-          <span>今日必看</span>
+          <span>今日重点</span>
         </div>
         <div>
-          <strong>{loading ? "…" : data?.counts?.upstreamSelected24h ?? "—"}</strong>
-          <span>24H 精选</span>
+          <strong>{loading ? "…" : browse.length}</strong>
+          <span>值得积累</span>
         </div>
       </section>
 
@@ -188,25 +207,30 @@ export function DailyHotPage() {
         <div className="daily-hot-daily">
           <IconClock aria-hidden="true" />
           <span>
-            AI 日报 {data?.daily?.date || "—"} · {data?.daily?.itemCount ?? "—"} 条 · 北京时间 08:00 发布
+            中国政府网要闻与最新政策 · 30 分钟本地缓存 · 以官方原文为准
           </span>
           <ExternalNewsLink
             className="daily-hot-inline-link"
-            href={data?.daily?.links?.aihot}
-            label="打开 AI HOT 日报"
+            href={data?.source?.url}
+            label="打开中国政府网"
           >
-            打开日报 <IconArrowUpRight aria-hidden="true" />
+            官方首页 <IconArrowUpRight aria-hidden="true" />
           </ExternalNewsLink>
         </div>
-        <button
-          className="daily-hot-refresh"
-          disabled={refreshing}
-          onClick={() => void refresh(true)}
-          type="button"
-        >
-          <IconRefresh aria-hidden="true" />
-          {refreshing ? "刷新中" : "刷新"}
-        </button>
+        <div className="daily-hot-refresh-control">
+          <span aria-live="polite" className="daily-hot-refresh-note">
+            {refreshOutcome}
+          </span>
+          <button
+            className="daily-hot-refresh"
+            disabled={refreshing}
+            onClick={() => void refresh(true)}
+            type="button"
+          >
+            <IconRefresh aria-hidden="true" />
+            {refreshing ? "正在刷新…" : "强制刷新"}
+          </button>
+        </div>
       </div>
 
       {stale ? (
@@ -219,7 +243,7 @@ export function DailyHotPage() {
         <LoadingState />
       ) : unavailable ? (
         <div className="error-note daily-hot-unavailable">
-          <strong>AI HOT 暂时无法读取</strong>
+          <strong>官方时政数据暂时无法读取</strong>
           <p>{result.error?.message || data?.error?.message || "本地数据服务或外部来源不可用。"}</p>
           <button onClick={() => void refresh(true)} type="button">重新连接</button>
         </div>
@@ -231,7 +255,7 @@ export function DailyHotPage() {
                 <span className="daily-hot-section__icon"><IconEye aria-hidden="true" /></span>
                 <div>
                   <span className="eyebrow">MUST READ</span>
-                  <h2 id="must-read-title">今日必看</h2>
+                  <h2 id="must-read-title">今日重点</h2>
                 </div>
               </div>
             </header>
@@ -247,7 +271,7 @@ export function DailyHotPage() {
                 <IconShieldCheck aria-hidden="true" />
                 <div>
                   <strong>今天没有必看热点</strong>
-                  <span>仍可查看值得浏览和其余动态。</span>
+                  <span>仍可查看值得积累和其余官方动态。</span>
                 </div>
               </div>
             )}
@@ -259,7 +283,7 @@ export function DailyHotPage() {
                 <span className="daily-hot-section__icon"><IconStack2 aria-hidden="true" /></span>
                 <div>
                   <span className="eyebrow">WORTH BROWSING</span>
-                  <h2 id="browse-title">值得浏览</h2>
+                  <h2 id="browse-title">值得积累</h2>
                 </div>
               </div>
             </header>
@@ -267,7 +291,7 @@ export function DailyHotPage() {
               {browse.length > 0 ? (
                 browse.map((item) => <CompactHotRow item={item} key={item.id} />)
               ) : (
-                <div className="collection-empty">当前没有更多值得浏览的动态。</div>
+                <div className="collection-empty">当前没有更多值得积累的动态。</div>
               )}
             </div>
           </section>
@@ -285,8 +309,8 @@ export function DailyHotPage() {
           ) : null}
 
           <footer className="daily-hot-footnote">
-            <span>数据来源：AI HOT</span>
-            <span>标题、摘要与事件综述可能由 AI 生成；数字、政策与原话请回第三方原文核对。</span>
+            <span>数据来源：中国政府网·要闻、中国政府网·最新政策</span>
+            <span>“备考价值”和“备考切入”为本地规则生成；事实、数字、政策表述与原话请回官方原文核对。</span>
           </footer>
         </>
       )}

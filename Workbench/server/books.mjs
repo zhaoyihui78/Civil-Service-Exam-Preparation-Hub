@@ -102,6 +102,8 @@ function buildBook(relativePath, documents) {
     relativePath,
     title,
     author: metadataSource?.frontmatter?.author || null,
+    description: metadataSource?.frontmatter?.description || null,
+    isExamBook: chapterDocuments.some((document) => document.frontmatter?.exam === true),
     coverDocumentId: cover?.id || null,
     coverPath: cover?.path || null,
     original: original
@@ -147,9 +149,11 @@ export function booksPayload(index) {
     grouped.get(relativePath).push(document);
   }
 
-  const books = [...grouped.entries()]
+  const allBooks = [...grouped.entries()]
     .map(([relativePath, documents]) => buildBook(relativePath, documents))
-    .filter((book) => book.totalReadingFiles > 0)
+    .filter((book) => book.totalReadingFiles > 0);
+  const examBooks = allBooks.filter((book) => book.isExamBook);
+  const books = (examBooks.length > 0 ? examBooks : allBooks)
     .sort(
       (left, right) =>
         updatedTime(right.updatedAt) - updatedTime(left.updatedAt) ||
@@ -162,4 +166,17 @@ export function booksPayload(index) {
     chapterTotal: books.reduce((sum, book) => sum + book.chapterCount, 0),
     books,
   };
+}
+
+export function bookPdfDocument(index, id) {
+  const document = (index?.documents ?? []).find((item) => item.id === id);
+  if (
+    !document ||
+    document.extension !== "pdf" ||
+    !document.path.startsWith(`${BOOKS_ROOT}/`) ||
+    document.path.split("/").some((segment) => segment.startsWith("."))
+  ) {
+    return null;
+  }
+  return document;
 }

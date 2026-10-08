@@ -41,9 +41,9 @@ test("daily hot keeps the attention policy behind the screen", () => {
   }
 
   assert.match(source, /aria-label="热点概览"/);
-  assert.match(source, />多源热点</);
-  assert.match(source, />今日必看</);
-  assert.match(source, />24H 精选</);
+  assert.match(source, />官方候选</);
+  assert.match(source, />今日重点</);
+  assert.match(source, />值得积累</);
   assert.match(source, /data\.fetchedAt/);
 });
 

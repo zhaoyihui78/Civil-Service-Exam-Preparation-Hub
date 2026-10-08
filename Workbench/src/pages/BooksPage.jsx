@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
+import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   IconArrowLeft,
@@ -8,13 +9,21 @@ import {
   IconBook2,
   IconBookmark,
   IconBooks,
+  IconChevronLeft,
   IconChevronRight,
+  IconDownload,
   IconFileText,
+  IconFileTypePdf,
+  IconFolderOpen,
   IconLanguage,
+  IconMaximize,
+  IconMinus,
   IconPhoto,
+  IconPlus,
+  IconX,
 } from "@tabler/icons-react";
 import { PageHeader } from "../components/PageHeader";
-import { loadBooks } from "../lib/api";
+import { loadBooks, openLocalTarget } from "../lib/api";
 import {
   BOOK_READING_PROGRESS_EVENT,
   BOOK_READING_PROGRESS_KEY,
@@ -83,9 +92,9 @@ function Shelf({ data, onOpenBook, onOpenDocument, progressByBook }) {
   return (
     <div className="page page--books">
       <PageHeader
-        eyebrow="READING LIBRARY"
-        title="书架"
-        description="Books 是独立阅读空间：从封面进入书籍，按章节阅读中文译本，也可随时切回英文原版。"
+        eyebrow="CIVIL SERVICE COURSES · READING"
+        title="考公课程与书架"
+        description="围绕岗位选择、行测、申论和马克思主义理论组织的分章课程，可记录阅读位置并继续学习。"
         aside={
           <div className="books-total mono">
             <span>{data?.total ?? 0}</span>
@@ -160,7 +169,7 @@ function Shelf({ data, onOpenBook, onOpenDocument, progressByBook }) {
                 >
                   <BookCover book={book} />
                   <span className="book-card__body">
-                    <span className="eyebrow">IN YOUR LIBRARY</span>
+                    <span className="eyebrow">EXAM COURSE</span>
                     <strong>{book.title}</strong>
                     <span className="book-card__author">{book.author || "作者未记录"}</span>
                     <span className="book-card__stats">
@@ -186,8 +195,8 @@ function Shelf({ data, onOpenBook, onOpenDocument, progressByBook }) {
       ) : (
         <div className="books-empty">
           <IconBooks size={28} stroke={1.5} />
-          <strong>书架还是空的</strong>
-          <span>放入 `10_raw/books/书名/` 的章节会自动出现在这里。</span>
+          <strong>考公书架还是空的</strong>
+          <span>放入 `10_raw/books/书名/中文阅读版/` 的章节会自动出现在这里。</span>
         </div>
       )}
     </div>
@@ -207,6 +216,242 @@ function groupChapters(chapters) {
   return groups;
 }
 
+function PdfReaderModal({ book, onClose }) {
+  const shellRef = useRef(null);
+  const stageRef = useRef(null);
+  const canvasRef = useRef(null);
+  const [page, setPage] = useState(1);
+  const [pageInput, setPageInput] = useState("1");
+  const [zoom, setZoom] = useState(100);
+  const [pdfDocument, setPdfDocument] = useState(null);
+  const [totalPages, setTotalPages] = useState(0);
+  const [rendering, setRendering] = useState(true);
+  const [error, setError] = useState("");
+  const [stageWidth, setStageWidth] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const pdfUrl = `/api/book-pdfs/${encodeURIComponent(book.original.id)}`;
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event) => {
+      if (event.key === "Escape" && !document.fullscreenElement) onClose();
+    };
+    const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    window.addEventListener("keydown", onKeyDown);
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+    };
+  }, [onClose]);
+
+  useEffect(() => {
+    let active = true;
+    let loadingTask = null;
+    import("pdfjs-dist")
+      .then((pdfjs) => {
+        if (!active) return null;
+        pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+        loadingTask = pdfjs.getDocument({ url: pdfUrl });
+        return loadingTask.promise;
+      })
+      .then((document) => {
+        if (!document) return;
+        if (!active) return;
+        setPdfDocument(document);
+        setTotalPages(document.numPages);
+        setPageInput("1");
+      })
+      .catch(() => {
+        if (active) setError("PDF 加载失败，请尝试在 Finder 中打开原文件。");
+      });
+    return () => {
+      active = false;
+      loadingTask?.destroy();
+    };
+  }, [pdfUrl]);
+
+  useEffect(() => {
+    if (!stageRef.current) return undefined;
+    const observer = new ResizeObserver(([entry]) => {
+      setStageWidth(Math.round(entry.contentRect.width));
+    });
+    observer.observe(stageRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!pdfDocument || !canvasRef.current || !stageRef.current || !stageWidth) return undefined;
+    let active = true;
+    let renderTask = null;
+    setRendering(true);
+    setError("");
+
+    pdfDocument.getPage(page)
+      .then((pdfPage) => {
+        if (!active) return null;
+        const unscaled = pdfPage.getViewport({ scale: 1 });
+        const availableWidth = Math.max(stageRef.current.clientWidth - 56, 280);
+        const scale = (availableWidth / unscaled.width) * (zoom / 100);
+        const viewport = pdfPage.getViewport({ scale });
+        const outputScale = Math.min(window.devicePixelRatio || 1, 2.25);
+        const canvas = canvasRef.current;
+        const context = canvas.getContext("2d", { alpha: false });
+        canvas.width = Math.floor(viewport.width * outputScale);
+        canvas.height = Math.floor(viewport.height * outputScale);
+        canvas.style.width = `${Math.floor(viewport.width)}px`;
+        canvas.style.height = `${Math.floor(viewport.height)}px`;
+        renderTask = pdfPage.render({
+          canvasContext: context,
+          transform: outputScale === 1 ? null : [outputScale, 0, 0, outputScale, 0, 0],
+          viewport,
+        });
+        return renderTask.promise;
+      })
+      .then(() => {
+        if (active) setRendering(false);
+      })
+      .catch((renderError) => {
+        if (active && renderError?.name !== "RenderingCancelledException") {
+          setError("这一页暂时无法渲染，请重试或打开原文件。");
+          setRendering(false);
+        }
+      });
+
+    return () => {
+      active = false;
+      renderTask?.cancel();
+    };
+  }, [page, pdfDocument, stageWidth, zoom]);
+
+  const goToPage = (nextPage) => {
+    const requested = Math.max(1, Number.parseInt(String(nextPage), 10) || 1);
+    const normalized = totalPages ? Math.min(requested, totalPages) : requested;
+    setPage(normalized);
+    setPageInput(String(normalized));
+    stageRef.current?.scrollTo({ top: 0, left: 0 });
+  };
+
+  const changeZoom = (nextZoom) => {
+    setZoom(Math.min(200, Math.max(50, nextZoom)));
+  };
+
+  const toggleFullscreen = async () => {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    } else {
+      await shellRef.current?.requestFullscreen();
+    }
+  };
+
+  return (
+    <div
+      aria-label={`阅读原版 PDF：${book.title}`}
+      aria-modal="true"
+      className="pdf-reader"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+      role="dialog"
+    >
+      <section className="pdf-reader__shell" ref={shellRef}>
+        <header className="pdf-reader__header">
+          <div className="pdf-reader__identity">
+            <span className="pdf-reader__mark"><IconFileTypePdf size={19} /></span>
+            <span>
+              <small>ORIGINAL PDF</small>
+              <strong>{book.original.fileName || book.title}</strong>
+            </span>
+          </div>
+
+          <div className="pdf-reader__controls" aria-label="PDF 阅读控制">
+            <div className="pdf-reader__control-group">
+              <button
+                aria-label="上一页"
+                disabled={page <= 1}
+                onClick={() => goToPage(page - 1)}
+                type="button"
+              >
+                <IconChevronLeft size={17} />
+              </button>
+              <form
+                className="pdf-reader__page-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  goToPage(pageInput);
+                }}
+              >
+                <span>第</span>
+                <input
+                  aria-label="PDF 页码"
+                  inputMode="numeric"
+                  min="1"
+                  onChange={(event) => setPageInput(event.target.value.replace(/\D/g, ""))}
+                  value={pageInput}
+                />
+                <span>页</span>
+              </form>
+              <button aria-label="下一页" disabled={Boolean(totalPages && page >= totalPages)} onClick={() => goToPage(page + 1)} type="button">
+                <IconChevronRight size={17} />
+              </button>
+              {totalPages ? <span className="pdf-reader__page-total mono">/ {totalPages}</span> : null}
+            </div>
+
+            <div className="pdf-reader__control-group">
+              <button aria-label="缩小" disabled={zoom <= 50} onClick={() => changeZoom(zoom - 10)} type="button">
+                <IconMinus size={17} />
+              </button>
+              <span className="pdf-reader__zoom mono">{zoom}%</span>
+              <button aria-label="放大" disabled={zoom >= 200} onClick={() => changeZoom(zoom + 10)} type="button">
+                <IconPlus size={17} />
+              </button>
+            </div>
+          </div>
+
+          <div className="pdf-reader__actions">
+            <button onClick={() => openLocalTarget(book.original.id, "finder")} title="在 Finder 显示" type="button">
+              <IconFolderOpen size={18} />
+            </button>
+            <a download href={`${pdfUrl}?download=1`} title="下载 PDF">
+              <IconDownload size={18} />
+            </a>
+            <button onClick={toggleFullscreen} title={isFullscreen ? "退出全屏" : "全屏阅读"} type="button">
+              <IconMaximize size={18} />
+            </button>
+            <button className="pdf-reader__close" onClick={onClose} title="关闭阅读器" type="button">
+              <IconX size={19} />
+            </button>
+          </div>
+        </header>
+
+        <div className="pdf-reader__stage" ref={stageRef}>
+          {error ? (
+            <div className="pdf-reader__error" role="alert">
+              <IconFileTypePdf size={28} />
+              <strong>{error}</strong>
+              <button onClick={() => openLocalTarget(book.original.id, "finder")} type="button">在 Finder 显示</button>
+            </div>
+          ) : null}
+          {!error && (!pdfDocument || rendering) ? (
+            <div className="pdf-reader__loading" role="status">
+              <span />
+              <strong>{pdfDocument ? `正在绘制第 ${page} 页` : "正在打开原版 PDF"}</strong>
+              <small>{pdfDocument ? `${zoom}% · 高清渲染` : "大文件首次加载可能需要几秒"}</small>
+            </div>
+          ) : null}
+          <canvas aria-label={`${book.title}原版 PDF 第 ${page} 页`} ref={canvasRef} />
+        </div>
+        <footer className="pdf-reader__footer">
+          <span>PDF 在本机浏览器内逐页高清渲染，原文件不会上传</span>
+          <span className="mono">第 {page}{totalPages ? ` / ${totalPages}` : ""} 页 · ESC 关闭</span>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 function BookDetail({ book, onBack, onOpenDocument, savedProgress }) {
   const resume = useMemo(
     () => resolveBookResume(book, savedProgress),
@@ -215,6 +460,7 @@ function BookDetail({ book, onBack, onOpenDocument, savedProgress }) {
   const [language, setLanguage] = useState(
     resume?.language || (book.chapters.zh?.length ? "zh" : "en"),
   );
+  const [pdfOpen, setPdfOpen] = useState(false);
 
   useEffect(() => {
     setLanguage(resume?.language || (book.chapters.zh?.length ? "zh" : "en"));
@@ -249,28 +495,35 @@ function BookDetail({ book, onBack, onOpenDocument, savedProgress }) {
       >
         <BookCover book={book} compact />
         <div className="book-detail-hero__content">
-          <span className="eyebrow">CURRENT BOOK</span>
+          <span className="eyebrow">CURRENT EXAM COURSE</span>
           <h1>{book.title}</h1>
           <p className="book-detail-hero__author">{book.author || "作者未记录"}</p>
           <p className="book-detail-hero__description">
-            中文忠实阅读版与英文原版逐章对应，书中原图会在沉浸阅读器里按原位置展示。
+            {book.description || "按考试能力拆分章节，边读边形成可复用的作答方法与复盘记录。"}
           </p>
           <div className="book-detail-hero__meta">
             <span><IconFileText size={15} /> {book.chapterCount} 个章节</span>
             <span><IconPhoto size={15} /> {book.imageCount} 张原图</span>
             <span><IconLanguage size={15} /> {book.languages.length} 个版本</span>
           </div>
-          <button
-            className="book-primary-action"
-            disabled={!primaryChapter}
-            onClick={() => openChapter(primaryChapter)}
-            type="button"
-          >
-            <IconBook size={18} />
-            {languageResume
-              ? `继续阅读 · ${languageResume.chapter.title}（${formatBookChapterProgress(languageResume.progress)}）`
-              : language === "zh" ? "开始读中文版" : "Start reading"}
-          </button>
+          <div className="book-detail-actions">
+            <button
+              className="book-primary-action"
+              disabled={!primaryChapter}
+              onClick={() => openChapter(primaryChapter)}
+              type="button"
+            >
+              <IconBook size={18} />
+              {languageResume
+                ? `继续阅读 · ${languageResume.chapter.title}（${formatBookChapterProgress(languageResume.progress)}）`
+                : language === "zh" ? "开始读中文版" : "Start reading"}
+            </button>
+            {book.original ? (
+              <button className="book-original-action" onClick={() => setPdfOpen(true)} type="button">
+                <IconFileTypePdf size={17} /> 在站内阅读 PDF
+              </button>
+            ) : null}
+          </div>
         </div>
       </motion.section>
 
@@ -328,6 +581,9 @@ function BookDetail({ book, onBack, onOpenDocument, savedProgress }) {
           ))}
         </div>
       </section>
+      {pdfOpen && book.original ? (
+        <PdfReaderModal book={book} onClose={() => setPdfOpen(false)} />
+      ) : null}
     </div>
   );
 }
@@ -364,7 +620,7 @@ export function BooksPage({ onOpenDocument }) {
   if (result.source === "loading") {
     return (
       <div className="page page--books">
-        <PageHeader eyebrow="READING LIBRARY" title="书架" description="正在整理本地书籍与章节……" />
+        <PageHeader eyebrow="CIVIL SERVICE COURSES · READING" title="考公课程与书架" description="正在整理本地备考课程与章节……" />
         <div className="books-loading">
           <div className="skeleton" />
           <div className="skeleton" />

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,7 +33,7 @@ import {
   materialReadingQueuePayload,
   materialsHomePayload,
 } from "./materials.mjs";
-import { booksPayload } from "./books.mjs";
+import { bookPdfDocument, booksPayload } from "./books.mjs";
 import {
   getSocialInsight,
   getSocialTrend,
@@ -46,6 +47,9 @@ import {
 } from "./wiki-ingest-runner.mjs";
 import { createVaultSyncService } from "./vault-sync.mjs";
 import { loadAttentionStrategy } from "./public-config.mjs";
+import { createExamPlannerRepository } from "./exam-planner.mjs";
+import { createExamOpportunitiesRepository } from "./exam-opportunities.mjs";
+import { createExamCurrentAffairsService } from "./exam-current-affairs.mjs";
 
 const workbenchRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const defaultVaultRoot = path.resolve(
@@ -120,6 +124,93 @@ async function serveVaultImage(res, index, vaultRoot, id) {
     "X-Content-Type-Options": "nosniff",
   });
   res.end(buffer);
+}
+
+function encodedDownloadName(fileName) {
+  return encodeURIComponent(fileName || "document.pdf")
+    .replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function requestedByteRange(header, size) {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(String(header || "").trim());
+  if (!match) return null;
+
+  const [, rawStart, rawEnd] = match;
+  if (!rawStart && !rawEnd) return null;
+  let start;
+  let end;
+  if (!rawStart) {
+    const suffixLength = Number(rawEnd);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return null;
+    start = Math.max(size - suffixLength, 0);
+    end = size - 1;
+  } else {
+    start = Number(rawStart);
+    end = rawEnd ? Number(rawEnd) : size - 1;
+  }
+  if (
+    !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(end) ||
+    start < 0 ||
+    end < start ||
+    start >= size
+  ) {
+    return null;
+  }
+  return { start, end: Math.min(end, size - 1) };
+}
+
+async function serveBookPdf(req, res, index, vaultRoot, id, download = false) {
+  const document = bookPdfDocument(index, id);
+  if (!document) {
+    return json(res, 404, {
+      error: { code: "BOOK_PDF_NOT_FOUND", message: "原版 PDF 不存在。" },
+    });
+  }
+
+  const validated = await validateVaultSelections([document.path], {
+    vaultRoot,
+    allowedRoots: ["10_raw"],
+  });
+  const selection = validated.selections[0];
+  if (!selection || selection.kind !== "file" || selection.size <= 0) {
+    return json(res, 404, {
+      error: { code: "BOOK_PDF_NOT_FOUND", message: "原版 PDF 无法读取。" },
+    });
+  }
+
+  const rangeHeader = req.headers.range;
+  const range = rangeHeader ? requestedByteRange(rangeHeader, selection.size) : null;
+  if (rangeHeader && !range) {
+    res.writeHead(416, {
+      "Content-Range": `bytes */${selection.size}`,
+      "X-Content-Type-Options": "nosniff",
+    });
+    return res.end();
+  }
+
+  const contentLength = range ? range.end - range.start + 1 : selection.size;
+  const fileName = document.fileName || "document.pdf";
+  const disposition = download ? "attachment" : "inline";
+  res.writeHead(range ? 206 : 200, {
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "private, no-store",
+    "Content-Disposition": `${disposition}; filename="document.pdf"; filename*=UTF-8''${encodedDownloadName(fileName)}`,
+    "Content-Length": contentLength,
+    ...(range ? { "Content-Range": `bytes ${range.start}-${range.end}/${selection.size}` } : {}),
+    "Content-Type": "application/pdf",
+    "X-Content-Type-Options": "nosniff",
+  });
+
+  const stream = createReadStream(selection.absolutePath, range || undefined);
+  stream.on("error", () => {
+    if (!res.headersSent) {
+      json(res, 500, { error: { code: "BOOK_PDF_READ_FAILED", message: "PDF 读取失败。" } });
+    } else {
+      res.destroy();
+    }
+  });
+  stream.pipe(res);
 }
 
 function readerImageDocument(index, sourceId, rawSource) {
@@ -458,6 +549,7 @@ function collectionPayload(index, kind) {
   if (kind === "wiki") {
     const typeLabels = {
       source: "来源拆解",
+      "source-summary": "来源摘要",
       framework: "方法框架",
       concept: "核心概念",
       diagnosis: "诊断判断",
@@ -468,13 +560,22 @@ function collectionPayload(index, kind) {
       conflict: "争议问题",
       question: "复用问答",
     };
-    const groups = Object.entries(index.wiki.countsByType)
+    const examPages = index.wiki.pages.filter((page) =>
+      (page.tags ?? []).some((tag) => ["考公", "马克思主义", "申论", "行测"].includes(tag)),
+    );
+    const pages = examPages.length ? examPages : index.wiki.pages;
+    const countsByType = pages.reduce((counts, page) => {
+      const key = page.type || "unknown";
+      counts[key] = (counts[key] || 0) + 1;
+      return counts;
+    }, {});
+    const groups = Object.entries(countsByType)
       .sort((left, right) => right[1] - left[1])
       .map(([key, count]) => groupDefinition(key, typeLabels[key] ?? key, count));
     return {
-      total: index.wiki.pages.length,
+      total: pages.length,
       groups,
-      items: index.wiki.pages,
+      items: pages,
     };
   }
 
@@ -780,6 +881,9 @@ export function workbenchApiPlugin({
   let readerNoteApiMutationQueue = Promise.resolve();
   const readerNotes = createReaderNotesRepository({ vaultRoot });
   const materialReadingState = createMaterialReadingStateRepository({ vaultRoot });
+  const examPlanner = createExamPlannerRepository({ vaultRoot });
+  const examOpportunities = createExamOpportunitiesRepository({ vaultRoot });
+  const examCurrentAffairs = createExamCurrentAffairsService();
   const wikiIngest = createWikiIngestRunner({ vaultRoot });
   const readerExplanations = readerExplanationService ??
     createReaderExplanationsService({ vaultRoot });
@@ -995,6 +1099,97 @@ export function workbenchApiPlugin({
             return json(res, 200, await loadAttentionStrategy(workbenchRoot));
           }
 
+          if (req.method === "GET" && url.pathname === "/api/exam/dashboard") {
+            return json(res, 200, await examPlanner.dashboard());
+          }
+
+          if (req.method === "GET" && url.pathname === "/api/exam/opportunities") {
+            return json(res, 200, await examOpportunities.list());
+          }
+
+          if (req.method === "POST" && url.pathname === "/api/exam/opportunities") {
+            const body = await readJson(req, 32 * 1024);
+            assertAllowedObjectKeys(
+              body,
+              new Set(["examType", "region", "city", "unit", "role", "code", "fit", "requirements", "status", "sourceLabel", "url"]),
+              "INVALID_EXAM_OPPORTUNITY",
+            );
+            return json(res, 201, await examOpportunities.add(body));
+          }
+
+          if (req.method === "POST" && url.pathname === "/api/exam/opportunities/import") {
+            const body = await readJson(req, 12 * 1024 * 1024);
+            assertAllowedObjectKeys(
+              body,
+              new Set(["examType", "region", "sourceLabel", "sourceUrl", "sourceFile", "status", "items"]),
+              "INVALID_EXAM_OPPORTUNITY_IMPORT",
+            );
+            return json(res, 201, await examOpportunities.importBatch(body));
+          }
+
+          const examOpportunityMatch = url.pathname.match(/^\/api\/exam\/opportunities\/([^/]+)$/);
+          if (examOpportunityMatch && req.method === "DELETE") {
+            return json(
+              res,
+              200,
+              await examOpportunities.remove(decodeURIComponent(examOpportunityMatch[1])),
+            );
+          }
+
+          if (req.method === "GET" && url.pathname === "/api/exam/current-affairs") {
+            return json(res, 200, await examCurrentAffairs.load({
+              force: url.searchParams.get("refresh") === "1",
+            }));
+          }
+
+          if (req.method === "PUT" && url.pathname === "/api/exam/profile") {
+            const body = await readJson(req, 16 * 1024);
+            assertAllowedObjectKeys(
+              body,
+              new Set(["examName", "examDate", "targetScore", "dailyMinutes"]),
+              "INVALID_EXAM_INPUT",
+            );
+            await examPlanner.updateProfile(body);
+            return json(res, 200, await examPlanner.dashboard());
+          }
+
+          if (req.method === "POST" && url.pathname === "/api/exam/tasks") {
+            const body = await readJson(req, 16 * 1024);
+            assertAllowedObjectKeys(
+              body,
+              new Set(["title", "subject", "date", "estimatedMinutes", "target", "priority"]),
+              "INVALID_EXAM_INPUT",
+            );
+            await examPlanner.addTask(body);
+            return json(res, 201, await examPlanner.dashboard());
+          }
+
+          const examTaskMatch = url.pathname.match(/^\/api\/exam\/tasks\/([^/]+)$/);
+          if (examTaskMatch) {
+            const taskId = decodeURIComponent(examTaskMatch[1]);
+            if (req.method === "PATCH") {
+              const body = await readJson(req, 8 * 1024);
+              assertAllowedObjectKeys(body, new Set(["status"]), "INVALID_EXAM_INPUT");
+              await examPlanner.updateTask(taskId, body);
+              return json(res, 200, await examPlanner.dashboard());
+            }
+            if (req.method === "DELETE") {
+              await examPlanner.deleteTask(taskId);
+              return json(res, 200, await examPlanner.dashboard());
+            }
+          }
+
+          if (req.method === "POST" && url.pathname === "/api/exam/logs") {
+            const body = await readJson(req, 32 * 1024);
+            assertAllowedObjectKeys(
+              body,
+              new Set(["date", "subject", "minutes", "questions", "correct", "note"]),
+              "INVALID_EXAM_INPUT",
+            );
+            await examPlanner.addLog(body);
+            return json(res, 201, await examPlanner.dashboard());
+          }
+
           if (req.method === "GET" && url.pathname === "/api/materials") {
             const [current, readingState] = await Promise.all([
               currentIndex(),
@@ -1005,6 +1200,19 @@ export function workbenchApiPlugin({
 
           if (req.method === "GET" && url.pathname === "/api/books") {
             return json(res, 200, booksPayload(await currentIndex()));
+          }
+
+          if (req.method === "GET" && url.pathname.startsWith("/api/book-pdfs/")) {
+            const id = decodeURIComponent(url.pathname.slice("/api/book-pdfs/".length));
+            const current = await currentIndex();
+            return serveBookPdf(
+              req,
+              res,
+              current,
+              vaultRoot,
+              id,
+              url.searchParams.get("download") === "1",
+            );
           }
 
           if (req.method === "GET" && url.pathname === "/api/materials/folder") {

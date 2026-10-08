@@ -1,6 +1,13 @@
 import path from "node:path";
 
 const MATERIAL_ROOT = "10_raw";
+const EXAM_MATERIAL_ROOTS = Object.freeze([
+  "10_raw/exam-aptitude",
+  "10_raw/exam-essay",
+  "10_raw/exam-interview",
+  "10_raw/exam-current-affairs",
+  "10_raw/exam-marxism",
+]);
 const DISPLAY_NAMES = Object.freeze({
   articles: "文章",
   "codex-sessions": "Codex 活动",
@@ -14,6 +21,11 @@ const DISPLAY_NAMES = Object.freeze({
   "web-search": "网页研究",
   weixin: "微信资料",
   youtube: "YouTube",
+  "exam-aptitude": "行测专项",
+  "exam-essay": "申论训练",
+  "exam-interview": "面试训练",
+  "exam-current-affairs": "时政与政策",
+  "exam-marxism": "马克思主义理论",
 });
 
 export class MaterialsError extends Error {
@@ -83,7 +95,7 @@ function decorateDocument(document, maps) {
 
 function rawDocuments(index, readingState) {
   const maps = queueMaps(readingState);
-  return (index?.documents ?? [])
+  const documents = (index?.documents ?? [])
     .filter(
       (item) =>
         item.layer === "raw" &&
@@ -92,6 +104,12 @@ function rawDocuments(index, readingState) {
         !item.path.split("/").some((segment) => segment.startsWith(".")),
     )
     .map((item) => decorateDocument(item, maps));
+  const examDocuments = documents.filter((item) =>
+    EXAM_MATERIAL_ROOTS.some(
+      (root) => item.path === root || item.path.startsWith(`${root}/`),
+    ),
+  );
+  return examDocuments.length > 0 ? examDocuments : documents;
 }
 
 function createFolder(relativePath) {

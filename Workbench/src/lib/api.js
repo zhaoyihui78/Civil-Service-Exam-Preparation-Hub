@@ -8,7 +8,6 @@ import {
   httpApiError,
   normalizeApiFailure,
 } from "./api-errors";
-import { createDailyHotLoader } from "../../shared/ai-hot.mjs";
 
 const DEFAULT_TIMEOUT = 12_000;
 
@@ -64,67 +63,85 @@ export function loadOverview() {
   return withFallback(() => request("/api/overview"), fallbackOverview);
 }
 
-let dailyHotLoader = null;
-let dailyHotStrategyKey = null;
-
-async function configuredDailyHotLoader() {
-  let strategy = null;
-  try {
-    strategy = await request("/api/config/attention");
-  } catch {
-    // Hosted/static builds use the shared neutral default.
-  }
-  const key = JSON.stringify(strategy ?? {});
-  if (!dailyHotLoader || key !== dailyHotStrategyKey) {
-    dailyHotLoader = createDailyHotLoader({
-      requestTimeoutMs: 20_000,
-      strategy,
-    });
-    dailyHotStrategyKey = key;
-  }
-  return dailyHotLoader;
+export function loadExamDashboard() {
+  return request("/api/exam/dashboard");
 }
 
-const unavailableDailyHot = {
-  schemaVersion: 1,
-  status: "unavailable",
-  fetchedAt: null,
-  source: {
-    name: "AI HOT",
-    url: "https://aihot.virxact.com/agent",
-  },
-  policy: null,
-  daily: null,
-  counts: {
-    upstreamHot: null,
-    upstreamSelected24h: null,
-    mustRead: 0,
-    browse: 0,
-    other: 0,
-  },
-  tiers: {
-    mustRead: [],
-    browse: [],
-    other: [],
-  },
-  error: {
-    code: "AI_HOT_DATA_SERVICE_UNAVAILABLE",
-    message: "AI HOT 暂时无法读取。",
-  },
-};
+export function loadExamOpportunities() {
+  return request("/api/exam/opportunities");
+}
+
+export function createExamOpportunity(opportunity) {
+  return request("/api/exam/opportunities", {
+    method: "POST",
+    body: JSON.stringify(opportunity),
+  });
+}
+
+export function deleteExamOpportunity(opportunityId) {
+  return request(`/api/exam/opportunities/${encodeURIComponent(opportunityId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function importExamOpportunities(payload) {
+  return request("/api/exam/opportunities/import", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    timeout: 45_000,
+  });
+}
+
+export function updateExamProfile(profile) {
+  return request("/api/exam/profile", {
+    method: "PUT",
+    body: JSON.stringify(profile),
+  });
+}
+
+export function createExamTask(task) {
+  return request("/api/exam/tasks", {
+    method: "POST",
+    body: JSON.stringify(task),
+  });
+}
+
+export function updateExamTask(taskId, updates) {
+  return request(`/api/exam/tasks/${encodeURIComponent(taskId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+}
+
+export function deleteExamTask(taskId) {
+  return request(`/api/exam/tasks/${encodeURIComponent(taskId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function createStudyLog(log) {
+  return request("/api/exam/logs", {
+    method: "POST",
+    body: JSON.stringify(log),
+  });
+}
 
 export async function loadDailyHot({ refresh = false } = {}) {
-  try {
-    const loader = await configuredDailyHotLoader();
-    const data = await loader({ force: refresh });
-    return { data, source: "live", error: null };
-  } catch (error) {
-    return {
-      data: unavailableDailyHot,
-      source: "fallback",
-      error: normalizeApiFailure(error),
-    };
-  }
+  return withFallback(
+    () => request(`/api/exam/current-affairs${refresh ? "?refresh=1" : ""}`, {
+      timeout: 25_000,
+    }),
+    {
+      schemaVersion: 1,
+      status: "unavailable",
+      fetchedAt: null,
+      source: { name: "中国政府网", url: "https://www.gov.cn/" },
+      sources: [],
+      counts: { upstream: null, mustRead: 0, browse: 0, other: 0 },
+      tiers: { mustRead: [], browse: [], other: [] },
+      error: { message: "官方时政数据暂时无法读取。" },
+    },
+  );
 }
 
 export function loadCollection(kind, params = {}) {

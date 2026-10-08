@@ -13,6 +13,8 @@ import { OverviewPage } from "./pages/OverviewPage";
 import { SystemPage } from "./pages/SystemPage";
 import { TopicsPage } from "./pages/TopicsPage";
 import { SocialInsightsPage, SocialTrendDetailPage } from "./pages/SocialInsightsPage";
+import { ExamDashboardPage } from "./pages/ExamDashboardPage";
+import { OpportunityRadarPage } from "./pages/OpportunityRadarPage";
 import { useVaultSync } from "./hooks/useVaultSync";
 
 const localWorkbench = import.meta.env.VITE_WORKBENCH_HOSTED !== "true";
@@ -73,16 +75,18 @@ export function App() {
     <>
       <AppShell onOpenSearch={appContext.openSearch} sync={vaultSync}>
         <Routes key={routeRevision}>
-          <Route path="/" element={<OverviewPage onOpenDocument={openDocument} />} />
+          <Route path="/" element={<ExamDashboardPage />} />
+          <Route path="/opportunities" element={<OpportunityRadarPage />} />
+          <Route path="/knowledge-overview" element={<OverviewPage onOpenDocument={openDocument} />} />
           <Route path="/graph" element={<GraphPage onOpenDocument={openDocument} />} />
           <Route
             path="/wiki"
             element={
               <CollectionPage
                 kind="wiki"
-                eyebrow="KNOWLEDGE LAYER"
-                title="Wiki 层"
-                description="结构化知识：来源拆解、概念、框架、诊断与待验证问题。星图的线性视图。"
+                eyebrow="CIVIL SERVICE · MARXISM"
+                title="考公知识库"
+                description="行测、申论、面试与马克思主义理论的结构化知识网络。"
                 onOpenDocument={openDocument}
               />
             }

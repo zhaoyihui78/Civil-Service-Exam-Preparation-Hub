@@ -29,5 +29,8 @@ secrets.*.json
 *.log
 
 Workbench/config/attention.local.json
+个人知识库/20_exam/.exam-planner.json
+个人知识库/20_exam/.exam-opportunities.json
+个人知识库/20_exam/.exam-opportunities.custom.json
 个人知识库/10_raw/my-thoughts/reading-notes/*
 !个人知识库/10_raw/my-thoughts/reading-notes/.gitkeep
