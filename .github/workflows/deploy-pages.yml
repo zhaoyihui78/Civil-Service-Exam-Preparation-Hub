@@ -30,7 +30,9 @@ jobs:
           cache: npm
           cache-dependency-path: Workbench/package-lock.json
       - name: Install dependencies
-        run: npm ci --registry=https://registry.npmjs.org --replace-registry-host=always
+        run: |
+          sed -i 's#https://mirrors.cloud.tencent.com/npm/#https://registry.npmjs.org/#g' package-lock.json
+          npm ci --registry=https://registry.npmjs.org
       - name: Build public read-only site
         env:
           VITE_BASE_PATH: /Civil-Service-Exam-Preparation-Hub/
