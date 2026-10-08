@@ -23,7 +23,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { PageHeader } from "../components/PageHeader";
-import { loadBooks, openLocalTarget } from "../lib/api";
+import { HOSTED_ACCESS_REQUIRED, loadBooks, loadHostedBookPdf, openLocalTarget } from "../lib/api";
 import {
   BOOK_READING_PROGRESS_EVENT,
   BOOK_READING_PROGRESS_KEY,
@@ -39,6 +39,7 @@ function loadingResult() {
 }
 
 function coverUrl(book) {
+  if (HOSTED_ACCESS_REQUIRED) return null;
   return book.coverDocumentId
     ? `/api/vault-images/${encodeURIComponent(book.coverDocumentId)}`
     : null;
@@ -229,7 +230,9 @@ function PdfReaderModal({ book, onClose }) {
   const [error, setError] = useState("");
   const [stageWidth, setStageWidth] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const pdfUrl = `/api/book-pdfs/${encodeURIComponent(book.original.id)}`;
+  const [pdfUrl, setPdfUrl] = useState(
+    HOSTED_ACCESS_REQUIRED ? null : `/api/book-pdfs/${encodeURIComponent(book.original.id)}`,
+  );
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -248,6 +251,25 @@ function PdfReaderModal({ book, onClose }) {
   }, [onClose]);
 
   useEffect(() => {
+    if (!HOSTED_ACCESS_REQUIRED) return undefined;
+    let active = true;
+    let objectUrl = null;
+    loadHostedBookPdf(book.original.id)
+      .then((url) => {
+        objectUrl = url;
+        if (active) setPdfUrl(url);
+      })
+      .catch((loadError) => {
+        if (active) setError(loadError.message || "加密 PDF 加载失败。");
+      });
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [book.original.id]);
+
+  useEffect(() => {
+    if (!pdfUrl) return undefined;
     let active = true;
     let loadingTask = null;
     import("pdfjs-dist")
@@ -265,7 +287,11 @@ function PdfReaderModal({ book, onClose }) {
         setPageInput("1");
       })
       .catch(() => {
-        if (active) setError("PDF 加载失败，请尝试在 Finder 中打开原文件。");
+        if (active) {
+          setError(HOSTED_ACCESS_REQUIRED
+            ? "PDF 加载失败，请关闭后重试。"
+            : "PDF 加载失败，请尝试在 Finder 中打开原文件。");
+        }
       });
     return () => {
       active = false;
@@ -315,7 +341,9 @@ function PdfReaderModal({ book, onClose }) {
       })
       .catch((renderError) => {
         if (active && renderError?.name !== "RenderingCancelledException") {
-          setError("这一页暂时无法渲染，请重试或打开原文件。");
+          setError(HOSTED_ACCESS_REQUIRED
+            ? "这一页暂时无法渲染，请关闭后重试。"
+            : "这一页暂时无法渲染，请重试或打开原文件。");
           setRendering(false);
         }
       });
@@ -411,10 +439,12 @@ function PdfReaderModal({ book, onClose }) {
           </div>
 
           <div className="pdf-reader__actions">
-            <button onClick={() => openLocalTarget(book.original.id, "finder")} title="在 Finder 显示" type="button">
-              <IconFolderOpen size={18} />
-            </button>
-            <a download href={`${pdfUrl}?download=1`} title="下载 PDF">
+            {!HOSTED_ACCESS_REQUIRED ? (
+              <button onClick={() => openLocalTarget(book.original.id, "finder")} title="在 Finder 显示" type="button">
+                <IconFolderOpen size={18} />
+              </button>
+            ) : null}
+            <a download={book.original.fileName || `${book.title}.pdf`} href={pdfUrl || undefined} title="下载 PDF">
               <IconDownload size={18} />
             </a>
             <button onClick={toggleFullscreen} title={isFullscreen ? "退出全屏" : "全屏阅读"} type="button">
@@ -431,7 +461,7 @@ function PdfReaderModal({ book, onClose }) {
             <div className="pdf-reader__error" role="alert">
               <IconFileTypePdf size={28} />
               <strong>{error}</strong>
-              <button onClick={() => openLocalTarget(book.original.id, "finder")} type="button">在 Finder 显示</button>
+              {!HOSTED_ACCESS_REQUIRED ? <button onClick={() => openLocalTarget(book.original.id, "finder")} type="button">在 Finder 显示</button> : null}
             </div>
           ) : null}
           {!error && (!pdfDocument || rendering) ? (
@@ -444,7 +474,7 @@ function PdfReaderModal({ book, onClose }) {
           <canvas aria-label={`${book.title}原版 PDF 第 ${page} 页`} ref={canvasRef} />
         </div>
         <footer className="pdf-reader__footer">
-          <span>PDF 在本机浏览器内逐页高清渲染，原文件不会上传</span>
+          <span>{HOSTED_ACCESS_REQUIRED ? "PDF 已加密传输，并在当前浏览器内解密渲染" : "PDF 在本机浏览器内逐页高清渲染，原文件不会上传"}</span>
           <span className="mono">第 {page}{totalPages ? ` / ${totalPages}` : ""} 页 · ESC 关闭</span>
         </footer>
       </section>

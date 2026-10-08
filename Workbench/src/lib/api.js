@@ -14,19 +14,14 @@ const HOSTED = import.meta.env.VITE_WORKBENCH_HOSTED === "true";
 export const HOSTED_ACCESS_REQUIRED =
   HOSTED && import.meta.env.VITE_REQUIRE_ACCESS_KEY === "true";
 let hostedDataPromise = null;
+let hostedAccessKey = "";
 
 function decodeBase64(value) {
   const binary = window.atob(value);
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
-async function decryptHostedData(accessKey) {
-  const response = await fetch(`${import.meta.env.BASE_URL}hosted-data.enc.json`, {
-    cache: "no-store",
-    headers: { Accept: "application/json" },
-  });
-  if (!response.ok) throw new Error("加密数据加载失败，请稍后重试。");
-  const envelope = await response.json();
+async function decryptEnvelope(envelope, accessKey) {
   if (
     envelope?.version !== 1 ||
     envelope?.kdf?.name !== "PBKDF2" ||
@@ -60,10 +55,20 @@ async function decryptHostedData(accessKey) {
       key,
       decodeBase64(envelope.data),
     );
-    return JSON.parse(new TextDecoder().decode(plaintext));
+    return plaintext;
   } catch {
     throw new Error("访问密钥不正确。");
   }
+}
+
+async function decryptHostedData(accessKey) {
+  const response = await fetch(`${import.meta.env.BASE_URL}hosted-data.enc.json`, {
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) throw new Error("加密数据加载失败，请稍后重试。");
+  const plaintext = await decryptEnvelope(await response.json(), accessKey);
+  return JSON.parse(new TextDecoder().decode(plaintext));
 }
 
 export function unlockHostedData(accessKey) {
@@ -71,8 +76,10 @@ export function unlockHostedData(accessKey) {
   const normalized = String(accessKey || "").trim();
   if (!normalized) return Promise.reject(new Error("请输入访问密钥。"));
   const attempt = decryptHostedData(normalized);
+  hostedAccessKey = normalized;
   hostedDataPromise = attempt.catch((error) => {
     hostedDataPromise = null;
+    hostedAccessKey = "";
     throw error;
   });
   return hostedDataPromise;
@@ -80,6 +87,21 @@ export function unlockHostedData(accessKey) {
 
 export function lockHostedData() {
   hostedDataPromise = null;
+  hostedAccessKey = "";
+}
+
+export async function loadHostedBookPdf(documentId) {
+  if (!HOSTED_ACCESS_REQUIRED || !hostedAccessKey) return null;
+  const data = await loadHostedData();
+  const asset = data.pdfAssets?.[documentId];
+  if (!asset?.url) throw new Error("分享快照中没有这份 PDF。");
+  const response = await fetch(`${import.meta.env.BASE_URL}${asset.url}`, {
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) throw new Error("加密 PDF 加载失败，请稍后重试。");
+  const plaintext = await decryptEnvelope(await response.json(), hostedAccessKey);
+  return URL.createObjectURL(new Blob([plaintext], { type: "application/pdf" }));
 }
 
 function hostedReadOnlyError() {
@@ -124,6 +146,7 @@ async function hostedRequest(path, options = {}) {
   if (url.pathname === "/api/overview") return data.overview;
   if (url.pathname === "/api/exam/dashboard") return data.examDashboard;
   if (url.pathname === "/api/exam/opportunities") return data.examOpportunities;
+  if (url.pathname === "/api/exam/current-affairs") return data.currentAffairs;
   if (url.pathname === "/api/materials") return data.materials;
   if (url.pathname === "/api/materials/folder") {
     return data.materialFolders[url.searchParams.get("path") || "10_raw"] || {

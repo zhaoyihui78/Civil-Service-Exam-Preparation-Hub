@@ -39,6 +39,12 @@ jobs:
           VITE_BASE_PATH: /Civil-Service-Exam-Preparation-Hub/
           VITE_REQUIRE_ACCESS_KEY: "true"
         run: npm run build
+      - name: Use encrypted shared snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download shared-snapshot --repo "$GITHUB_REPOSITORY" --pattern shared-snapshot.tar.gz --dir /tmp --clobber
+          tar -xzf /tmp/shared-snapshot.tar.gz -C dist/client
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
